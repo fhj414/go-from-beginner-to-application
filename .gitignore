@@ -36,3 +36,8 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Local game data (go-gopher-quest)
+data/
+.gocache/
+/go-gopher-quest

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ff8fab" />
+  <title>小地鼠闯 Go 星球</title>
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div id="app" class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo" id="mascot" aria-hidden="true">🥚</span>
+        <div>
+          <div class="brand-title">小地鼠闯 Go 星球</div>
+          <div class="brand-sub" id="stageLine">加载中…</div>
+        </div>
+      </div>
+      <button type="button" class="icon-btn" id="btnLb" title="学习时长榜">🏆</button>
+      <button type="button" class="icon-btn" id="btnShare" title="分享给朋友">📣</button>
+    </header>
+
+    <section id="screen-landing" class="screen hidden">
+      <div class="card hero">
+        <div class="hero-art">
+          <div class="hero-mascot">🐹</div>
+          <div class="hero-bubble">
+            把 Go 基础拆成轻松小关卡，边玩边学也能有收获。
+          </div>
+        </div>
+        <h1>欢迎来到小地鼠冒险营</h1>
+        <p class="lead">适合初学者和完全没写过代码的人。每关只学一个小点，玩完能记住、也能继续往简单应用走。</p>
+        <div class="chips">
+          <span>卡通闯关</span>
+          <span>进度记忆</span>
+          <span>微信授权</span>
+          <span>好友分享</span>
+        </div>
+        <label class="field">
+          <span>给自己起个可爱的名字</span>
+          <input id="nick" maxlength="16" placeholder="例如：胡萝卜队长" autocomplete="nickname" />
+        </label>
+        <button type="button" class="btn primary" id="btnDemo">一键开始冒险</button>
+        <button type="button" class="btn soft hidden" id="btnResumeDemo">继续上次的演示进度</button>
+        <button type="button" class="btn ghost hidden" id="btnWx">微信授权登录</button>
+        <p class="fineprint" id="resumeHint">演示模式也会记住你的闯关进度；配置微信后可切换为真实授权登录。</p>
+      </div>
+    </section>
+
+    <section id="screen-map" class="screen hidden">
+      <div class="card player-card">
+        <div class="player-head">
+          <div class="player-badge" id="playerBadge">🐹</div>
+          <div class="player-copy">
+            <div class="eyebrow" id="stageChip">种子选手</div>
+            <h2 id="playerName">探险小地鼠</h2>
+            <p id="playerDesc">今天也来玩一小关吧。</p>
+          </div>
+        </div>
+        <div class="progress-panel">
+          <div class="progress-meta">
+            <strong id="progressLine">已完成 0/0 关</strong>
+            <span id="nextLine">下一站：第 1 关</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+        </div>
+        <div class="reminder" id="reminder"></div>
+        <div class="quick-actions">
+          <button type="button" class="btn primary compact" id="btnContinue">继续冒险</button>
+          <button type="button" class="btn soft compact" id="btnQuickShare">邀请朋友</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span>✨ 经验值</span>
+          <strong id="xpVal">0</strong>
+        </div>
+        <div class="stat-card">
+          <span>⏱ 学习时长</span>
+          <strong id="studyVal">0 秒</strong>
+        </div>
+        <div class="stat-card">
+          <span>🏁 已通关</span>
+          <strong id="doneVal">0</strong>
+        </div>
+        <div class="stat-card">
+          <span>🎯 当前目标</span>
+          <strong id="goalVal">第 1 关</strong>
+        </div>
+      </div>
+
+      <section class="badge-panel">
+        <div class="section-head">
+          <h3>成长互动标识</h3>
+          <span>不同进度会解锁不同身份</span>
+        </div>
+        <div class="badge-strip" id="badgeStrip"></div>
+      </section>
+
+      <section class="map-panel">
+        <div class="section-head">
+          <h3>冒险地图</h3>
+          <span>从基础直觉到简单应用</span>
+        </div>
+        <ol class="path" id="pathList"></ol>
+      </section>
+
+      <div class="footer-actions">
+        <button type="button" class="btn ghost" id="btnLogout">退出当前角色</button>
+      </div>
+    </section>
+
+    <section id="screen-play" class="screen hidden">
+      <button type="button" class="btn ghost back" id="btnBack">← 返回地图</button>
+      <article class="card lesson" id="lessonCard">
+        <div class="lesson-top">
+          <p class="tag" id="lessonTag"></p>
+          <span class="reward-pill" id="lessonReward">+10 XP</span>
+        </div>
+        <h2 id="lessonTitle"></h2>
+        <p class="story" id="lessonStory"></p>
+        <div class="coach-line" id="coachLine"></div>
+        <p class="question" id="lessonQ"></p>
+        <div id="lessonBody"></div>
+        <p class="hint" id="lessonHint"></p>
+        <div class="actions">
+          <button type="button" class="btn primary" id="btnCheck">检查一下 ✓</button>
+        </div>
+        <p class="toast hidden" id="feedback"></p>
+      </article>
+    </section>
+  </div>
+
+  <dialog id="dlgLb" class="modal">
+    <div class="modal-inner">
+      <div class="modal-head">
+        <h3>学习时长排行榜</h3>
+        <button type="button" class="icon-btn" data-close="dlgLb">✕</button>
+      </div>
+      <ol class="lb" id="lbList"></ol>
+      <p class="fineprint">统计你在页面前台认真闯关的时长，每 30 秒同步一次。</p>
+    </div>
+  </dialog>
+
+  <dialog id="dlgShare" class="modal">
+    <div class="modal-inner">
+      <div class="modal-head">
+        <h3>邀请朋友一起学</h3>
+        <button type="button" class="icon-btn" data-close="dlgShare">✕</button>
+      </div>
+      <p id="shareCopy">把这颗 Go 星球发给朋友，一起边玩边学。</p>
+      <div class="share-url" id="shareUrl"></div>
+      <button type="button" class="btn primary" id="btnNativeShare">立即分享</button>
+      <button type="button" class="btn soft" id="btnCopy">复制链接</button>
+      <p id="wxShareHint" class="fineprint hidden">
+        在微信内打开且公众号已配置 JS 接口安全域名时，点右上角「…」即可使用自定义分享卡片。
+      </p>
+    </div>
+  </dialog>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
