@@ -145,6 +145,23 @@ func (s *Server) Handler() http.Handler {
 	}))
 	mux.Handle("/static/", allowMethodH(http.MethodGet, http.StripPrefix("/static/", fs)))
 	mux.HandleFunc("/", allowMethod(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/MP_verify_") && strings.HasSuffix(r.URL.Path, ".txt") {
+			name := strings.TrimPrefix(r.URL.Path, "/")
+			f, err := StaticRoot.Open(name)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			defer f.Close()
+			b, err := io.ReadAll(f)
+			if err != nil {
+				http.Error(w, "read failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write(b)
+			return
+		}
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
