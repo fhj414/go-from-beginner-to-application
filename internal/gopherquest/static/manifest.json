@@ -2,7 +2,7 @@
   "name": "小地鼠闯 Go 星球",
   "short_name": "Go小地鼠",
   "description": "边玩边学 Go 的可爱小游戏",
-  "start_url": "/static/index.html",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#fff7ed",
   "theme_color": "#ff8fab",

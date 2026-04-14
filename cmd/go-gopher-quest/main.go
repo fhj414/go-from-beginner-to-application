@@ -48,7 +48,7 @@ func main() {
 		openHost = "127.0.0.1" + addr
 	}
 	log.Printf("gopher-quest listening on http://%s", openHost)
-	log.Printf("open http://%s/static/index.html", openHost)
+	log.Printf("open http://%s/", openHost)
 	if srv.JSSDK != nil {
 		log.Printf("WeChat JSSDK: signature API enabled at GET /api/wechat/jssdk-config")
 	}

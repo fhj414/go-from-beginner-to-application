@@ -138,12 +138,18 @@ func (s *Server) Handler() http.Handler {
 
 	// 分享落地页（微信抓取 og 标签用简单 HTML）
 	mux.HandleFunc("/share", allowMethod(http.MethodGet, s.handleSharePage))
+	mux.HandleFunc("/favicon.ico", allowMethod(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/static/wx-share.png", http.StatusFound)
+	}))
 
 	fs := http.FileServer(http.FS(StaticRoot))
 	mux.HandleFunc("/static", allowMethod(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/static/", http.StatusFound)
 	}))
 	mux.Handle("/static/", allowMethodH(http.MethodGet, http.StripPrefix("/static/", fs)))
+	mux.HandleFunc("/index.html", allowMethod(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/", http.StatusFound)
+	}))
 	mux.HandleFunc("/", allowMethod(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/MP_verify_") && strings.HasSuffix(r.URL.Path, ".txt") {
 			name := strings.TrimPrefix(r.URL.Path, "/")
@@ -166,7 +172,19 @@ func (s *Server) Handler() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		http.Redirect(w, r, "/static/index.html", http.StatusFound)
+		f, err := StaticRoot.Open("index.html")
+		if err != nil {
+			http.Error(w, "index missing", http.StatusInternalServerError)
+			return
+		}
+		defer f.Close()
+		b, err := io.ReadAll(f)
+		if err != nil {
+			http.Error(w, "read failed", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(b)
 	}))
 
 	return withCORS(withLogging(mux))
@@ -225,7 +243,8 @@ func (s *Server) handleDemoAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	ensureDailyReward(u)
 	if err := s.Store.UpsertUser(u); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
+		log.Printf("demo auth save failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": storeErrorMessage(err)})
 		return
 	}
 	if err := s.setSession(w, u.ID); err != nil {
@@ -314,6 +333,7 @@ func (s *Server) handleWeChatCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	ensureDailyReward(u)
 	if err := s.Store.UpsertUser(u); err != nil {
+		log.Printf("wechat callback save failed: %v", err)
 		http.Error(w, "save failed", http.StatusInternalServerError)
 		return
 	}
@@ -322,7 +342,7 @@ func (s *Server) handleWeChatCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := strings.TrimSuffix(os.Getenv("PUBLIC_BASE_URL"), "/")
-	redir := "/static/index.html?welcome=wechat"
+	redir := "/?welcome=wechat"
 	if base != "" {
 		http.Redirect(w, r, base+redir, http.StatusFound)
 		return
@@ -343,7 +363,8 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 	ensureDailyReward(u)
 	if err := s.Store.UpsertUser(u); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
+		log.Printf("handleMe save failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": storeErrorMessage(err)})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": publicUser(u, s.Curriculum.Lessons)})
@@ -425,7 +446,8 @@ func (s *Server) handlePutProgress(w http.ResponseWriter, r *http.Request) {
 	}
 	u.LastActiveAt = time.Now()
 	if err := s.Store.UpsertUser(u); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
+		log.Printf("progress save failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": storeErrorMessage(err)})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": publicUser(u, s.Curriculum.Lessons)})
@@ -452,7 +474,8 @@ func (s *Server) handleStudyTick(w http.ResponseWriter, r *http.Request) {
 	u.TotalStudySecs += b.Seconds
 	u.LastActiveAt = time.Now()
 	if err := s.Store.UpsertUser(u); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
+		log.Printf("study tick save failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": storeErrorMessage(err)})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"total_study_secs": u.TotalStudySecs})
@@ -532,9 +555,9 @@ func (s *Server) handleSharePage(w http.ResponseWriter, r *http.Request) {
 	desc := "边玩边学 Go 的超轻量小游戏，一起来收集小地鼠吧～"
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	base := strings.TrimSpace(os.Getenv("PUBLIC_BASE_URL"))
-	ogURL := "/static/index.html"
+	ogURL := "/"
 	if base != "" {
-		ogURL = strings.TrimSuffix(base, "/") + "/static/index.html"
+		ogURL = strings.TrimSuffix(base, "/") + "/"
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`<!DOCTYPE html><html lang="zh-CN"><head>
@@ -548,7 +571,7 @@ func (s *Server) handleSharePage(w http.ResponseWriter, r *http.Request) {
 <meta name="twitter:card" content="summary_large_image">
 </head><body style="font-family:system-ui;margin:2rem;">
 <p>` + escHTML(desc) + `</p>
-<p><a href="/static/index.html">打开游戏</a></p>
+<p><a href="/">打开游戏</a></p>
 </body></html>`))
 }
 
@@ -673,4 +696,15 @@ func randomID() string {
 		return strconv.FormatInt(time.Now().UnixNano(), 36)
 	}
 	return hex.EncodeToString(b[:])
+}
+
+func storeErrorMessage(err error) string {
+	msg := "save failed"
+	if err == nil {
+		return msg
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "upstash redis") {
+		return "storage unavailable: check UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN"
+	}
+	return msg
 }

@@ -130,7 +130,7 @@
   }
 
   function shareURL() {
-    return `${window.location.origin}/static/index.html`;
+    return `${window.location.origin}/`;
   }
 
   function ensureAudio() {
