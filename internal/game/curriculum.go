@@ -1,7 +1,10 @@
 // Package game 定义「小地鼠闯关」课程内容与关卡元数据（由 Go 服务下发给前端）。
 package game
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // LessonKind 决定前端用哪种小游戏组件渲染。
 type LessonKind string
@@ -154,7 +157,7 @@ func DefaultCurriculum() Curriculum {
 			"数组 array",
 			"切片 slice",
 			"都完全一样",
-		}, 1, "日常数据列表 чаще用 slice。", 13),
+		}, 1, "日常开发里，更常用 slice 来处理列表。", 13),
 		fill(12, "append 出场", "给切片加东西", "切片想再装一个元素时，最常见的伙伴就是 append。", "补上函数名", "", "(items, 3)", "append", []string{"append"}, "往 slice 里追加内容。", 13),
 		pick(13, "map 像字典", "键值对", "map 很适合存“名字 -> 值”的关系。", "下面哪个场景最适合 map？", []string{
 			"保存学生姓名对应分数",
@@ -231,7 +234,7 @@ func DefaultCurriculum() Curriculum {
 			"fmt/http",
 			"browser/go",
 		}, 0, "标准库已经自带 HTTP。", 18),
-		fill(31, "状态码", "接口回应", "HTTP 服务经常要回应一个状态码，表示请求是否成功。", "把空格补完整", "http.Status", "OK", "Status", []string{"status"}, "Go 标准库常量里就有。", 15),
+		fill(31, "状态码", "接口回应", "HTTP 服务经常要回应一个状态码，表示请求是否成功。", "把空格补完整", "http.Status", "", "OK", []string{"ok", "OK"}, "成功状态码常量连起来就是 http.StatusOK。", 15),
 		pick(32, "JSON 快递员", "接口返回", "很多 Go 服务会把数据编码成 JSON 再返回给前端。", "哪个标准库包最常用来处理 JSON？", []string{
 			"encoding/json",
 			"net/json",
@@ -329,6 +332,76 @@ func DefaultCurriculum() Curriculum {
 // NormalizeFillAnswer 供前端 / 测试参考。
 func NormalizeFillAnswer(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// ValidateCurriculum 在启动或测试时帮助发现题库配置错误。
+func ValidateCurriculum(c Curriculum) error {
+	if len(c.Lessons) == 0 {
+		return fmt.Errorf("curriculum has no lessons")
+	}
+	seenIDs := map[int]bool{}
+	for i, lesson := range c.Lessons {
+		if lesson.ID <= 0 {
+			return fmt.Errorf("lesson[%d] has invalid id %d", i, lesson.ID)
+		}
+		if seenIDs[lesson.ID] {
+			return fmt.Errorf("lesson id %d duplicated", lesson.ID)
+		}
+		seenIDs[lesson.ID] = true
+		if strings.TrimSpace(lesson.Title) == "" {
+			return fmt.Errorf("lesson %d missing title", lesson.ID)
+		}
+		if strings.TrimSpace(lesson.Question) == "" {
+			return fmt.Errorf("lesson %d missing question", lesson.ID)
+		}
+		switch lesson.Kind {
+		case KindPickOne:
+			if len(lesson.Options) < 2 {
+				return fmt.Errorf("lesson %d pick_one needs at least 2 options", lesson.ID)
+			}
+			if lesson.Correct < 0 || lesson.Correct >= len(lesson.Options) {
+				return fmt.Errorf("lesson %d pick_one correct index out of range", lesson.ID)
+			}
+		case KindOrder:
+			if len(lesson.OrderItems) == 0 || len(lesson.OrderItems) != len(lesson.OrderAnswer) {
+				return fmt.Errorf("lesson %d order config length mismatch", lesson.ID)
+			}
+			used := map[int]bool{}
+			for _, idx := range lesson.OrderAnswer {
+				if idx < 0 || idx >= len(lesson.OrderItems) {
+					return fmt.Errorf("lesson %d order answer index out of range", lesson.ID)
+				}
+				if used[idx] {
+					return fmt.Errorf("lesson %d order answer repeats index %d", lesson.ID, idx)
+				}
+				used[idx] = true
+			}
+		case KindFillText:
+			if strings.TrimSpace(lesson.FillAnswer) == "" {
+				return fmt.Errorf("lesson %d fill_text missing answer", lesson.ID)
+			}
+		case KindPair:
+			if len(lesson.PairLeft) == 0 || len(lesson.PairLeft) != len(lesson.PairAnswer) {
+				return fmt.Errorf("lesson %d pair_match config length mismatch", lesson.ID)
+			}
+			if len(lesson.PairRight) != len(lesson.PairLeft) {
+				return fmt.Errorf("lesson %d pair_match left/right length mismatch", lesson.ID)
+			}
+			used := map[int]bool{}
+			for _, idx := range lesson.PairAnswer {
+				if idx < 0 || idx >= len(lesson.PairRight) {
+					return fmt.Errorf("lesson %d pair answer index out of range", lesson.ID)
+				}
+				if used[idx] {
+					return fmt.Errorf("lesson %d pair answer repeats index %d", lesson.ID, idx)
+				}
+				used[idx] = true
+			}
+		default:
+			return fmt.Errorf("lesson %d has unknown kind %q", lesson.ID, lesson.Kind)
+		}
+	}
+	return nil
 }
 
 // StageForProgress 根据完成关卡数返回阶段标识（前端可做不同装扮与动效）。
