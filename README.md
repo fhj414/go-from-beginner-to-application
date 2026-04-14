@@ -139,3 +139,31 @@ go build -o bin/first-server ./cmd/first-server
 ## 许可证
 
 MIT License
+
+## Vercel 部署
+
+这个仓库现在支持部署到 Vercel，但要注意两点：
+
+- 入口不再依赖本地常驻端口，Vercel 会通过 `api/index.go` 调用同一套 Go `http.Handler`
+- 线上不要再用本地 JSON 文件存档；推荐配置 Upstash Redis REST 作为无状态持久化存储
+
+### 推荐环境变量
+
+- `SESSION_SECRET`：生产环境必须设置
+- `PUBLIC_BASE_URL`：你的线上域名，例如 `https://your-app.vercel.app`
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
+- `STORE_PREFIX`：可选，默认 `gq`
+
+### 微信能力额外配置
+
+- `WECHAT_APP_ID`
+- `WECHAT_APP_SECRET`
+- `WECHAT_REDIRECT_URL`
+- `WECHAT_SHARE_TITLE`
+- `WECHAT_SHARE_DESC`
+
+### 说明
+
+- 如果在 Vercel 上没有配置 `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`，项目仍然能跑，但会退回进程内存存储，只适合临时预览，不适合正式上线。
+- 本地开发仍然默认使用 `data/gopher-quest.json` 文件存储。

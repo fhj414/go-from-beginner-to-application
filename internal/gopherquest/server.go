@@ -196,14 +196,17 @@ func (s *Server) handleDemoAuth(w http.ResponseWriter, r *http.Request) {
 			Progress: store.Progress{
 				CurrentLesson: 1,
 				Completed:     map[int]bool{},
+				Stars:         map[int]int{},
 				XP:            0,
 				LastStage:     "seed",
+				StreakDays:    0,
 				UpdatedAt:     now,
 				ReminderNote:  "从第 1 关开始冒险吧～",
 			},
 			CreatedAt: now,
 		}
 	}
+	ensureDailyReward(u)
 	if err := s.Store.UpsertUser(u); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
 		return
@@ -275,8 +278,10 @@ func (s *Server) handleWeChatCallback(w http.ResponseWriter, r *http.Request) {
 			Progress: store.Progress{
 				CurrentLesson: 1,
 				Completed:     map[int]bool{},
+				Stars:         map[int]int{},
 				XP:            0,
 				LastStage:     "seed",
+				StreakDays:    0,
 				UpdatedAt:     time.Now(),
 				ReminderNote:  "从第 1 关开始冒险吧～",
 			},
@@ -290,6 +295,7 @@ func (s *Server) handleWeChatCallback(w http.ResponseWriter, r *http.Request) {
 	if u.Nickname == "" {
 		u.Nickname = "微信旅人"
 	}
+	ensureDailyReward(u)
 	if err := s.Store.UpsertUser(u); err != nil {
 		http.Error(w, "save failed", http.StatusInternalServerError)
 		return
@@ -318,6 +324,11 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
+	ensureDailyReward(u)
+	if err := s.Store.UpsertUser(u); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": publicUser(u, s.Curriculum.Lessons)})
 }
 
@@ -330,6 +341,7 @@ func (s *Server) handlePutProgress(w http.ResponseWriter, r *http.Request) {
 	type body struct {
 		CurrentLesson int          `json:"current_lesson"`
 		Completed     map[int]bool `json:"completed"`
+		Stars         map[int]int  `json:"stars"`
 		XP            int          `json:"xp"`
 	}
 	var b body
@@ -345,15 +357,38 @@ func (s *Server) handlePutProgress(w http.ResponseWriter, r *http.Request) {
 	if b.Completed == nil {
 		b.Completed = map[int]bool{}
 	}
+	if b.Stars == nil {
+		b.Stars = map[int]int{}
+	}
 	merged := map[int]bool{}
+	mergedStars := map[int]int{}
 	for id, ok := range u.Progress.Completed {
 		if ok && id >= 1 && id <= total {
 			merged[id] = true
 		}
 	}
+	for id, stars := range u.Progress.Stars {
+		if id >= 1 && id <= total && stars >= 1 {
+			if stars > 3 {
+				stars = 3
+			}
+			mergedStars[id] = stars
+		}
+	}
 	for id, ok := range b.Completed {
 		if ok && id >= 1 && id <= total {
 			merged[id] = true
+		}
+	}
+	for id, stars := range b.Stars {
+		if id < 1 || id > total || stars < 1 {
+			continue
+		}
+		if stars > 3 {
+			stars = 3
+		}
+		if stars > mergedStars[id] {
+			mergedStars[id] = stars
 		}
 	}
 	done := len(merged)
@@ -363,8 +398,11 @@ func (s *Server) handlePutProgress(w http.ResponseWriter, r *http.Request) {
 	u.Progress = store.Progress{
 		CurrentLesson: b.CurrentLesson,
 		Completed:     merged,
+		Stars:         mergedStars,
 		XP:            b.XP,
 		LastStage:     stage,
+		StreakDays:    u.Progress.StreakDays,
+		LastCheckIn:   u.Progress.LastCheckIn,
 		UpdatedAt:     time.Now(),
 		ReminderNote:  note,
 	}
@@ -508,9 +546,18 @@ func escHTML(s string) string {
 func publicUser(u *store.User, lessons []game.Lesson) map[string]any {
 	totalLessons := len(lessons)
 	done := 0
+	totalStars := 0
 	for id, ok := range u.Progress.Completed {
 		if ok && id >= 1 && id <= totalLessons {
 			done++
+		}
+	}
+	if u.Progress.Stars == nil {
+		u.Progress.Stars = map[int]int{}
+	}
+	for id, stars := range u.Progress.Stars {
+		if id >= 1 && id <= totalLessons && stars > 0 {
+			totalStars += stars
 		}
 	}
 	if u.Progress.CurrentLesson < 1 {
@@ -537,11 +584,15 @@ func publicUser(u *store.User, lessons []game.Lesson) map[string]any {
 		"source":           u.Source,
 		"total_study_secs": u.TotalStudySecs,
 		"progress_percent": progressPercent,
+		"total_stars":      totalStars,
 		"progress": map[string]any{
 			"current_lesson":  u.Progress.CurrentLesson,
 			"completed":       u.Progress.Completed,
+			"stars":           u.Progress.Stars,
 			"xp":              u.Progress.XP,
 			"last_stage":      u.Progress.LastStage,
+			"streak_days":     u.Progress.StreakDays,
+			"last_check_in":   u.Progress.LastCheckIn,
 			"updated_at":      u.Progress.UpdatedAt,
 			"reminder_note":   u.Progress.ReminderNote,
 			"completed_count": done,
@@ -572,6 +623,31 @@ func reminderNote(current int, total int, lessons []game.Lesson, completed map[i
 		}
 	}
 	return "上次进度：第 " + strconv.Itoa(current) + " 关「" + title + "」 · 已完成 " + strconv.Itoa(done) + "/" + strconv.Itoa(total) + " 关"
+}
+
+func ensureDailyReward(u *store.User) {
+	if u == nil {
+		return
+	}
+	if u.Progress.Stars == nil {
+		u.Progress.Stars = map[int]int{}
+	}
+	today := time.Now().Format("2006-01-02")
+	if u.Progress.LastCheckIn == today {
+		return
+	}
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	if u.Progress.LastCheckIn == yesterday {
+		u.Progress.StreakDays++
+	} else {
+		u.Progress.StreakDays = 1
+	}
+	u.Progress.LastCheckIn = today
+	u.Progress.XP += 6
+	u.Progress.UpdatedAt = time.Now()
+	if strings.TrimSpace(u.Progress.ReminderNote) == "" {
+		u.Progress.ReminderNote = "签到成功，今天也来和小地鼠学一点 Go 吧～"
+	}
 }
 
 func randomID() string {

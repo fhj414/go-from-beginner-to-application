@@ -2,6 +2,7 @@
   const LS_KEY = "gq_client_state_v2";
   const DEMO_ID_KEY = "gq_demo_resume_id";
   const DEMO_NAME_KEY = "gq_demo_resume_name";
+  const SOUND_KEY = "gq_sound_enabled";
 
   const $ = (id) => document.getElementById(id);
 
@@ -12,7 +13,18 @@
     pickIdx: null,
     orderPerm: [],
     orderSel: null,
+    pairRightPerm: [],
+    pairLeftSel: null,
+    pairMatches: {},
     wxJssdk: false,
+    soundEnabled: localStorage.getItem(SOUND_KEY) !== "0",
+    combo: 0,
+    audioCtx: null,
+    musicTimer: null,
+    musicStep: 0,
+    mascotMood: "",
+    lessonAttempts: 0,
+    fillValue: "",
   };
 
   const stages = [
@@ -70,6 +82,31 @@
     return stages.find((item) => item.id === stage) || stages[0];
   }
 
+  function currentMascotIcon() {
+    if (state.mascotMood === "happy") return "🥳";
+    if (state.mascotMood === "oops") return "😵";
+    if (state.mascotMood === "think") return "🤔";
+    if (state.mascotMood === "win") return "🤩";
+    return stageMeta(state.user?.progress?.last_stage || "seed").icon;
+  }
+
+  function setMascotMood(mood, timeout = 0) {
+    state.mascotMood = mood || "";
+    const icon = currentMascotIcon();
+    if ($("mascot")) $("mascot").textContent = icon;
+    if ($("playerBadge")) $("playerBadge").textContent = icon;
+    if (timeout > 0) {
+      setTimeout(() => {
+        if (state.mascotMood === mood) {
+          state.mascotMood = "";
+          const resetIcon = currentMascotIcon();
+          if ($("mascot")) $("mascot").textContent = resetIcon;
+          if ($("playerBadge")) $("playerBadge").textContent = resetIcon;
+        }
+      }, timeout);
+    }
+  }
+
   function fmtSecs(n) {
     const s = Math.max(0, Math.floor(Number(n) || 0));
     if (s < 60) return `${s} 秒`;
@@ -94,6 +131,109 @@
 
   function shareURL() {
     return `${window.location.origin}/static/index.html`;
+  }
+
+  function ensureAudio() {
+    if (!state.soundEnabled) return null;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    if (!state.audioCtx) {
+      state.audioCtx = new Ctx();
+    }
+    if (state.audioCtx.state === "suspended") {
+      state.audioCtx.resume().catch(() => {});
+    }
+    return state.audioCtx;
+  }
+
+  function playTone(freq, duration, type = "sine", gain = 0.035, delay = 0) {
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const start = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    const amp = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+    amp.gain.setValueAtTime(0.0001, start);
+    amp.gain.exponentialRampToValueAtTime(gain, start + 0.02);
+    amp.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(amp);
+    amp.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + duration + 0.03);
+  }
+
+  function playFX(kind) {
+    if (!state.soundEnabled) return;
+    if (kind === "tap") {
+      playTone(520, 0.08, "triangle", 0.025);
+      return;
+    }
+    if (kind === "swap") {
+      playTone(420, 0.08, "square", 0.02);
+      playTone(620, 0.1, "triangle", 0.025, 0.05);
+      return;
+    }
+    if (kind === "success") {
+      playTone(523.25, 0.12, "triangle", 0.03);
+      playTone(659.25, 0.14, "triangle", 0.035, 0.08);
+      playTone(783.99, 0.18, "triangle", 0.04, 0.16);
+      return;
+    }
+    if (kind === "fail") {
+      playTone(260, 0.12, "sawtooth", 0.02);
+      playTone(210, 0.16, "sawtooth", 0.02, 0.08);
+      return;
+    }
+    if (kind === "levelup") {
+      playTone(587.33, 0.1, "triangle", 0.03);
+      playTone(783.99, 0.12, "triangle", 0.03, 0.07);
+      playTone(987.77, 0.18, "triangle", 0.035, 0.15);
+    }
+  }
+
+  function ensureMusicState() {
+    if (!state.soundEnabled) {
+      if (state.musicTimer) {
+        clearInterval(state.musicTimer);
+        state.musicTimer = null;
+      }
+      return;
+    }
+    if (!ensureAudio() || state.musicTimer) return;
+    const notes = [392, 440, 523.25, 440, 392, 329.63, 392, 523.25];
+    state.musicTimer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const note = notes[state.musicStep % notes.length];
+      state.musicStep += 1;
+      playTone(note, 0.18, "sine", 0.008);
+      if (state.musicStep % 4 === 0) {
+        playTone(note / 2, 0.24, "triangle", 0.005, 0.04);
+      }
+    }, 1600);
+  }
+
+  function renderStars(count) {
+    const n = Math.max(0, Math.min(3, Number(count) || 0));
+    return `${"★".repeat(n)}${"☆".repeat(3 - n)}`;
+  }
+
+  function updateSoundUI() {
+    $("btnSound").textContent = state.soundEnabled ? "🔊" : "🔈";
+    $("audioPill").textContent = `音效：${state.soundEnabled ? "开启" : "关闭"}`;
+    ensureMusicState();
+  }
+
+  function flashCelebration(text) {
+    const layer = $("celebration");
+    $("celebrationText").textContent = text;
+    layer.classList.remove("hidden", "show");
+    void layer.offsetWidth;
+    layer.classList.add("show");
+    setTimeout(() => {
+      layer.classList.remove("show");
+      layer.classList.add("hidden");
+    }, 1300);
   }
 
   function saveLocal() {
@@ -167,7 +307,7 @@
       return;
     }
     const meta = stageMeta(state.user.progress.last_stage || "seed");
-    $("mascot").textContent = meta.icon;
+    $("mascot").textContent = currentMascotIcon() || meta.icon;
     $("stageLine").textContent = `${state.user.nickname} · ${meta.name}`;
   }
 
@@ -194,6 +334,7 @@
       if (item.id === current) div.classList.add("active");
       div.innerHTML = `<span class="badge-icon">${item.icon}</span><strong>${item.name}</strong><small>${item.desc}</small>`;
       div.addEventListener("click", () => {
+        playFX("tap");
         $("reminder").textContent = `${item.icon} ${item.name}：${item.desc}`;
       });
       strip.append(div);
@@ -218,18 +359,31 @@
     $("doneVal").textContent = `${summary.done}/${summary.total}`;
     $("goalVal").textContent =
       summary.current > summary.total ? "邀请朋友来挑战" : `第 ${summary.current} 关`;
+    $("streakVal").textContent = `${u.progress.streak_days || 1} 天`;
+    $("starVal").textContent = `${u.total_stars || 0}`;
+    $("checkinPill").textContent = `签到：连续 ${u.progress.streak_days || 1} 天`;
     $("progressLine").textContent = `已完成 ${summary.done}/${summary.total} 关`;
     $("nextLine").textContent =
       summary.current > summary.total
         ? "主线通关啦，可以刷榜和分享"
         : `下一站：第 ${summary.current} 关 · ${u.progress.resume_title || "继续冒险"}`;
     $("progressFill").style.width = `${percent}%`;
+    $("mapMeter").innerHTML = `
+      <span class="meter-dot active"></span>
+      <span class="meter-line" style="--fill:${percent}%"></span>
+      <span class="meter-note">${percent}% 探索完成</span>
+    `;
+    $("moodPill").textContent =
+      summary.done === 0 ? "今日状态：准备出发" :
+      summary.done < summary.total ? `今日状态：连闯 ${summary.done} 关中` :
+      "今日状态：已经闪闪发光";
 
     const path = $("pathList");
     path.innerHTML = "";
     c.lessons.forEach((lesson) => {
       const done = !!u.progress.completed[lesson.id];
       const unlocked = lesson.id <= summary.current || done;
+      const stars = u.progress.stars?.[lesson.id] || 0;
       const row = document.createElement("li");
       const btn = document.createElement("button");
       btn.type = "button";
@@ -242,6 +396,7 @@
         <div class="meta">
           <strong>第 ${lesson.id} 关 · ${escapeHtml(lesson.title)}</strong>
           <span>${escapeHtml(lesson.subtitle)} · ${status} · +${lesson.reward_xp} XP</span>
+          <span class="star-line">${renderStars(stars)}</span>
         </div>
       `;
       btn.addEventListener("click", () => startLesson(lesson.id));
@@ -267,13 +422,22 @@
     return !!perm && !!ans && perm.length === ans.length && perm.every((v, i) => v === ans[i]);
   }
 
+  function normalizeFill(s) {
+    return String(s || "").trim().toLowerCase();
+  }
+
   function startLesson(id) {
     const lesson = state.curriculum.lessons.find((item) => item.id === id);
     if (!lesson) return;
     state.activeLesson = lesson;
     state.pickIdx = null;
     state.orderSel = null;
+    state.pairLeftSel = null;
+    state.pairMatches = {};
+    state.lessonAttempts = 0;
+    state.fillValue = "";
     state.orderPerm = lesson.kind === "order" ? shufflePerm(lesson.order_items.length) : [];
+    state.pairRightPerm = lesson.kind === "pair_match" ? shufflePerm(lesson.pair_right.length) : [];
 
     $("lessonTag").textContent = `${lesson.subtitle} · 第 ${lesson.id} 关`;
     $("lessonReward").textContent = `+${lesson.reward_xp} XP`;
@@ -288,6 +452,13 @@
     $("lessonQ").textContent = lesson.question;
     $("lessonHint").textContent = `提示：${lesson.hint}`;
     $("feedback").className = "toast hidden";
+    $("statusChip").textContent =
+      lesson.kind === "order" ? "请把步骤排顺序" :
+      lesson.kind === "pair_match" ? "请把左右概念配成一对" :
+      lesson.kind === "fill_text" ? "请补上关键字或代码片段" :
+      "请先选一个答案";
+    $("comboChip").textContent = state.combo > 1 ? `连胜感：x${state.combo}` : "连胜感：暖机中";
+    $("lessonReward").textContent = `+${lesson.reward_xp} XP · ${renderStars(state.user?.progress?.stars?.[lesson.id] || 0)}`;
 
     const body = $("lessonBody");
     body.innerHTML = "";
@@ -300,13 +471,47 @@
         btn.className = "opt";
         btn.textContent = text;
         btn.addEventListener("click", () => {
+          playFX("tap");
           state.pickIdx = idx;
+          $("statusChip").textContent = "已选择，准备检查";
           wrap.querySelectorAll(".opt").forEach((el) => el.classList.remove("selected"));
           btn.classList.add("selected");
         });
         wrap.append(btn);
       });
       body.append(wrap);
+    } else if (lesson.kind === "fill_text") {
+      const wrap = document.createElement("label");
+      wrap.className = "fill-wrap";
+      const prefix = document.createElement("span");
+      prefix.className = "fill-prefix";
+      prefix.textContent = lesson.fill_prefix || "";
+      const input = document.createElement("input");
+      input.className = "fill-input";
+      input.type = "text";
+      input.autocomplete = "off";
+      input.autocapitalize = "off";
+      input.spellcheck = false;
+      input.placeholder = "在这里输入";
+      input.addEventListener("input", () => {
+        state.fillValue = input.value;
+        $("statusChip").textContent = input.value.trim() ? "已填写，准备检查" : "请补上关键字或代码片段";
+      });
+      const suffix = document.createElement("span");
+      suffix.className = "fill-prefix";
+      suffix.textContent = lesson.fill_suffix || "";
+      wrap.append(prefix, input, suffix);
+      body.append(wrap);
+    } else if (lesson.kind === "pair_match") {
+      const tip = document.createElement("p");
+      tip.className = "fineprint";
+      tip.textContent = "先点左边概念，再点右边描述，就能配成一组。";
+      body.append(tip);
+      const grid = document.createElement("div");
+      grid.className = "pair-grid";
+      grid.id = "pairGrid";
+      body.append(grid);
+      renderPairGrid();
     } else {
       const tip = document.createElement("p");
       tip.className = "fineprint";
@@ -337,14 +542,76 @@
     });
   }
 
+  function renderPairGrid() {
+    const lesson = state.activeLesson;
+    const grid = $("pairGrid");
+    if (!lesson || !grid) return;
+    grid.innerHTML = "";
+    const left = document.createElement("div");
+    left.className = "pair-col";
+    lesson.pair_left.forEach((label, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pair-item";
+      if (state.pairLeftSel === idx) btn.classList.add("selected");
+      if (state.pairMatches[idx] !== undefined) btn.classList.add("done");
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        playFX("tap");
+        state.pairLeftSel = idx;
+        $("statusChip").textContent = "已选左侧概念，再点右侧描述";
+        renderPairGrid();
+      });
+      left.append(btn);
+    });
+
+    const right = document.createElement("div");
+    right.className = "pair-col";
+    state.pairRightPerm.forEach((rightIdx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pair-item soft";
+      const matchedLeft = Object.keys(state.pairMatches).find(
+        (leftIdx) => state.pairMatches[leftIdx] === rightIdx,
+      );
+      if (matchedLeft !== undefined) btn.classList.add("done");
+      btn.textContent = lesson.pair_right[rightIdx];
+      btn.addEventListener("click", () => onPairRightTap(rightIdx));
+      right.append(btn);
+    });
+    grid.append(left, right);
+  }
+
+  function onPairRightTap(rightIdx) {
+    if (state.pairLeftSel === null) {
+      playFX("tap");
+      $("statusChip").textContent = "先选左边概念哦";
+      return;
+    }
+    for (const key of Object.keys(state.pairMatches)) {
+      if (state.pairMatches[key] === rightIdx) {
+        delete state.pairMatches[key];
+      }
+    }
+    state.pairMatches[state.pairLeftSel] = rightIdx;
+    state.pairLeftSel = null;
+    playFX("swap");
+    $("statusChip").textContent = "已完成一组配对，继续吧";
+    renderPairGrid();
+  }
+
   function onOrderTap(pos) {
     if (state.orderSel === null) {
+      playFX("tap");
       state.orderSel = pos;
+      $("statusChip").textContent = "已选中一个步骤，再点另一个交换";
       renderOrderRow();
       return;
     }
     if (state.orderSel === pos) {
+      playFX("tap");
       state.orderSel = null;
+      $("statusChip").textContent = "已取消选择";
       renderOrderRow();
       return;
     }
@@ -352,6 +619,8 @@
     const b = pos;
     [state.orderPerm[a], state.orderPerm[b]] = [state.orderPerm[b], state.orderPerm[a]];
     state.orderSel = null;
+    playFX("swap");
+    $("statusChip").textContent = "顺序已调整，可以检查啦";
     renderOrderRow();
   }
 
@@ -362,6 +631,16 @@
       if (state.pickIdx === null) return false;
       return lesson.any_choice ? true : state.pickIdx === lesson.correct;
     }
+    if (lesson.kind === "fill_text") {
+      const ans = normalizeFill(lesson.fill_answer);
+      const aliases = (lesson.fill_aliases || []).map(normalizeFill);
+      const got = normalizeFill(state.fillValue);
+      return got !== "" && (got === ans || aliases.includes(got));
+    }
+    if (lesson.kind === "pair_match") {
+      const answer = lesson.pair_answer || [];
+      return answer.length > 0 && answer.every((rightIdx, leftIdx) => state.pairMatches[leftIdx] === rightIdx);
+    }
     return permMatchesAnswer(state.orderPerm, lesson.order_answer);
   }
 
@@ -370,6 +649,7 @@
     const body = {
       current_lesson: patch.current_lesson ?? u.progress.current_lesson,
       completed: { ...u.progress.completed, ...(patch.completed || {}) },
+      stars: { ...(u.progress.stars || {}), ...(patch.stars || {}) },
       xp: patch.xp ?? u.progress.xp,
     };
     const res = await api("/api/progress", {
@@ -388,27 +668,65 @@
     if (lesson.kind === "pick_one" && state.pickIdx === null) {
       fb.textContent = "先选一个答案吧，小地鼠在等你点一下。";
       fb.classList.add("bad");
+      $("statusChip").textContent = "还没有选择答案";
+      playFX("fail");
+      setMascotMood("think", 900);
+      return;
+    }
+    if (lesson.kind === "fill_text" && !normalizeFill(state.fillValue)) {
+      fb.textContent = "先填一下答案，再让小地鼠帮你检查。";
+      fb.classList.add("bad");
+      $("statusChip").textContent = "还没有填写答案";
+      playFX("fail");
+      setMascotMood("think", 900);
+      return;
+    }
+    if (lesson.kind === "pair_match" && Object.keys(state.pairMatches).length < (lesson.pair_left || []).length) {
+      fb.textContent = "还没配完哦，把左右两边都连起来再检查。";
+      fb.classList.add("bad");
+      $("statusChip").textContent = "还有概念没有配对完成";
+      playFX("fail");
+      setMascotMood("think", 900);
       return;
     }
     if (!lessonCorrect()) {
+      state.lessonAttempts += 1;
       fb.textContent = "差一点点，再看看提示，马上就会啦。";
       fb.classList.add("bad");
+      state.combo = 0;
+      $("comboChip").textContent = "连胜感：重新蓄力";
+      $("statusChip").textContent = "这次没关系，再试一次";
+      playFX("fail");
+      setMascotMood("oops", 1000);
       return;
     }
     const u = state.user;
     const total = state.curriculum.lessons.length || 1;
     const already = !!u.progress.completed[lesson.id];
+    const prevStage = stageMeta(u.progress.last_stage || "seed").id;
+    const earnedStars = state.lessonAttempts === 0 ? 3 : state.lessonAttempts === 1 ? 2 : 1;
+    const currentStars = u.progress.stars?.[lesson.id] || 0;
     const nextLesson = Math.min(total + 1, Math.max(u.progress.current_lesson, lesson.id + 1));
     await submitProgress({
       completed: { [lesson.id]: true },
+      stars: { [lesson.id]: Math.max(currentStars, earnedStars) },
       xp: already ? u.progress.xp : u.progress.xp + (lesson.reward_xp || 10),
       current_lesson: lesson.id >= u.progress.current_lesson ? nextLesson : u.progress.current_lesson,
     });
     const meta = stageMeta(state.user.progress.last_stage || "seed");
+    state.combo += 1;
     fb.textContent = already
       ? `这关你已经很熟啦，继续冲刺下一关。`
-      : `闯关成功！+${lesson.reward_xp} XP，当前身份：${meta.icon} ${meta.name}`;
+      : `闯关成功！+${lesson.reward_xp} XP，获得 ${renderStars(earnedStars)}，当前身份：${meta.icon} ${meta.name}`;
     fb.classList.add("ok");
+    $("statusChip").textContent = "回答正确，正在结算奖励";
+    $("comboChip").textContent = state.combo > 1 ? `连胜感：x${state.combo}` : `星级表现：${renderStars(earnedStars)}`;
+    playFX("success");
+    setMascotMood(meta.id !== prevStage ? "happy" : "win", 1200);
+    flashCelebration(already ? "熟练度提升啦！" : `奖励到手！+${lesson.reward_xp} XP · ${renderStars(earnedStars)}`);
+    if (meta.id !== prevStage) {
+      playFX("levelup");
+    }
     setHeaderFromUser();
     setTimeout(() => {
       showScreen("map");
@@ -454,6 +772,7 @@
         renderLanding();
         showScreen("landing");
       }
+      updateSoundUI();
     } catch (err) {
       console.error(err);
       $("stageLine").textContent = "网络开小差了，刷新试试";
@@ -566,8 +885,20 @@
   }
 
   $("btnLb").addEventListener("click", () => openLeaderboard().catch(console.error));
-  $("btnShare").addEventListener("click", openShare);
-  $("btnQuickShare").addEventListener("click", openShare);
+  $("btnShare").addEventListener("click", () => {
+    playFX("tap");
+    openShare();
+  });
+  $("btnSound").addEventListener("click", () => {
+    state.soundEnabled = !state.soundEnabled;
+    localStorage.setItem(SOUND_KEY, state.soundEnabled ? "1" : "0");
+    updateSoundUI();
+    playFX("tap");
+  });
+  $("btnQuickShare").addEventListener("click", () => {
+    playFX("tap");
+    openShare();
+  });
   $("btnNativeShare").addEventListener("click", () => nativeShare().catch(console.error));
   $("btnCopy").addEventListener("click", async () => {
     const text = `${shareText()} ${shareURL()}`;
@@ -580,11 +911,13 @@
   });
   $("btnCheck").addEventListener("click", () => onCheck().catch(console.error));
   $("btnBack").addEventListener("click", () => {
+    playFX("tap");
     showScreen("map");
     renderMap();
   });
   $("btnContinue").addEventListener("click", () => {
     if (!state.user) return;
+    playFX("tap");
     const id = Math.min(
       state.user.progress.current_lesson || 1,
       state.curriculum?.lessons?.length || 1,
@@ -609,6 +942,7 @@
   });
   document.querySelectorAll("[data-close]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      playFX("tap");
       document.getElementById(btn.getAttribute("data-close")).close();
     });
   });
@@ -634,6 +968,7 @@
   });
 
   loadWxMeta();
+  updateSoundUI();
   boot()
     .then(() => initWxJssdkShare())
     .catch(() => {});

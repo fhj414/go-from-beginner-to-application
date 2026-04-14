@@ -9,6 +9,14 @@
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
+  <div class="sky-decor" aria-hidden="true">
+    <span class="cloud cloud-a"></span>
+    <span class="cloud cloud-b"></span>
+    <span class="cloud cloud-c"></span>
+    <span class="spark spark-a"></span>
+    <span class="spark spark-b"></span>
+    <span class="spark spark-c"></span>
+  </div>
   <div id="app" class="app">
     <header class="topbar">
       <div class="brand">
@@ -18,6 +26,7 @@
           <div class="brand-sub" id="stageLine">加载中…</div>
         </div>
       </div>
+      <button type="button" class="icon-btn" id="btnSound" title="音效开关">🔊</button>
       <button type="button" class="icon-btn" id="btnLb" title="学习时长榜">🏆</button>
       <button type="button" class="icon-btn" id="btnShare" title="分享给朋友">📣</button>
     </header>
@@ -37,6 +46,18 @@
           <span>进度记忆</span>
           <span>微信授权</span>
           <span>好友分享</span>
+        </div>
+        <div class="hero-showcase">
+          <div class="mini-card">
+            <span>🎵</span>
+            <strong>轻音效互动</strong>
+            <small>点击、答对、升级都有小反馈</small>
+          </div>
+          <div class="mini-card">
+            <span>✨</span>
+            <strong>闯关庆祝动画</strong>
+            <small>答对时会有星星和彩带</small>
+          </div>
         </div>
         <label class="field">
           <span>给自己起个可爱的名字</span>
@@ -73,6 +94,11 @@
           <button type="button" class="btn primary compact" id="btnContinue">继续冒险</button>
           <button type="button" class="btn soft compact" id="btnQuickShare">邀请朋友</button>
         </div>
+        <div class="mood-bar">
+          <span class="mood-pill" id="moodPill">今日状态：准备出发</span>
+          <span class="mood-pill" id="audioPill">音效：开启</span>
+          <span class="mood-pill" id="checkinPill">签到：今天已领取</span>
+        </div>
       </div>
 
       <div class="stats-grid">
@@ -92,6 +118,14 @@
           <span>🎯 当前目标</span>
           <strong id="goalVal">第 1 关</strong>
         </div>
+        <div class="stat-card">
+          <span>🔥 连续学习</span>
+          <strong id="streakVal">1 天</strong>
+        </div>
+        <div class="stat-card">
+          <span>⭐ 星星收藏</span>
+          <strong id="starVal">0</strong>
+        </div>
       </div>
 
       <section class="badge-panel">
@@ -107,6 +141,7 @@
           <h3>冒险地图</h3>
           <span>从基础直觉到简单应用</span>
         </div>
+        <div class="map-meter" id="mapMeter"></div>
         <ol class="path" id="pathList"></ol>
       </section>
 
@@ -126,6 +161,10 @@
         <p class="story" id="lessonStory"></p>
         <div class="coach-line" id="coachLine"></div>
         <p class="question" id="lessonQ"></p>
+        <div class="lesson-status">
+          <span class="status-chip" id="statusChip">请先选一个答案</span>
+          <span class="status-chip soft" id="comboChip">连胜感：暖机中</span>
+        </div>
         <div id="lessonBody"></div>
         <p class="hint" id="lessonHint"></p>
         <div class="actions">
@@ -134,6 +173,13 @@
         <p class="toast hidden" id="feedback"></p>
       </article>
     </section>
+  </div>
+
+  <div id="celebration" class="celebration hidden" aria-hidden="true">
+    <div class="celebration-inner">
+      <div class="burst">✨</div>
+      <p id="celebrationText">太棒啦！</p>
+    </div>
   </div>
 
   <dialog id="dlgLb" class="modal">
