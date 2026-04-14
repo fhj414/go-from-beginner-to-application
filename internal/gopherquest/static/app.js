@@ -783,10 +783,9 @@
     try {
       const meta = await api("/api/wechat/enabled");
       state.wxJssdk = !!meta.jssdk;
-      $("btnWx").classList.toggle("hidden", !meta.enabled);
       $("wxShareHint").classList.toggle("hidden", !(isWeChat() && state.wxJssdk));
     } catch {
-      $("btnWx").classList.add("hidden");
+      state.wxJssdk = false;
     }
   }
 
@@ -930,9 +929,6 @@
     if (!resume) return;
     $("nick").value = resume.name || "";
     demoLogin(resume.id).catch(console.error);
-  });
-  $("btnWx").addEventListener("click", () => {
-    window.location.href = "/api/auth/wechat/start";
   });
   $("btnLogout").addEventListener("click", async () => {
     await api("/api/auth/logout", { method: "POST" });
