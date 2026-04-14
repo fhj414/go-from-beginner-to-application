@@ -169,7 +169,7 @@ func (j *JSSDKSigner) Sign(pageURL string) (*JSSDKSignResult, error) {
 	sig := hex.EncodeToString(sum[:])
 
 	origin := pu.Scheme + "://" + pu.Host
-	shareLink := origin + "/static/index.html"
+	shareLink := origin + "/"
 	shareImg := origin + "/static/wx-share.png"
 
 	return &JSSDKSignResult{
