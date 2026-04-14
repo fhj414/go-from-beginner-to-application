@@ -297,7 +297,7 @@
     $("btnResumeDemo").classList.toggle("hidden", !resume);
     $("resumeHint").textContent = resume
       ? `已记住演示身份「${resume.name}」，随时可以继续上次的冒险。`
-      : "演示模式也会记住你的闯关进度；配置微信后可切换为真实授权登录。";
+      : "你的冒险进度会自动保存，下次回来可以继续。";
   }
 
   function setHeaderFromUser() {
