@@ -25,7 +25,7 @@ type Lesson struct {
 	Story       string     `json:"story"`
 	Question    string     `json:"question"`
 	Options     []string   `json:"options,omitempty"`
-	Correct     int        `json:"correct,omitempty"`      // pick_one: 0-based index
+	Correct     int        `json:"correct"`                // pick_one: 0-based index
 	OrderItems  []string   `json:"order_items,omitempty"`  // order: 乱序由前端 shuffle
 	OrderAnswer []int      `json:"order_answer,omitempty"` // 正确顺序为 items 的下标排列
 	FillAnswer  string     `json:"fill_answer,omitempty"`
