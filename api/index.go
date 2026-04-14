@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/fhj/go-from-beginner-to-application/internal/gopherquest"
+	"github.com/fhj/go-from-beginner-to-application/pkg/gopherquestapp"
 )
 
 var (
@@ -16,7 +16,7 @@ var (
 
 func getHandler() (http.Handler, error) {
 	initOnce.Do(func() {
-		srv, err := gopherquest.NewServerFromEnv()
+		srv, err := gopherquestapp.NewServerFromEnv()
 		if err != nil {
 			initErr = err
 			return

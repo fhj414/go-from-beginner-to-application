@@ -1,4 +1,4 @@
-package gopherquest
+package gopherquestapp
 
 import (
 	"net/http"
@@ -8,11 +8,12 @@ import (
 
 	"github.com/fhj/go-from-beginner-to-application/internal/auth"
 	"github.com/fhj/go-from-beginner-to-application/internal/game"
+	"github.com/fhj/go-from-beginner-to-application/internal/gopherquest"
 	"github.com/fhj/go-from-beginner-to-application/internal/store"
 )
 
 // NewServerFromEnv 构建服务实例；本地和 Vercel 共用。
-func NewServerFromEnv() (*Server, error) {
+func NewServerFromEnv() (*gopherquest.Server, error) {
 	dataPath := strings.TrimSpace(os.Getenv("DATA_FILE"))
 	st, err := store.Open(dataPath)
 	if err != nil {
@@ -32,7 +33,7 @@ func NewServerFromEnv() (*Server, error) {
 	if wxCfg.CanJSSDK() {
 		jss = auth.NewJSSDKSigner(wxCfg, hc)
 	}
-	return &Server{
+	return &gopherquest.Server{
 		Store:      st,
 		Codec:      codec,
 		WeChat:     wxCfg,

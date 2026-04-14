@@ -23,11 +23,12 @@
 package main
 
 import (
-	"github.com/fhj/go-from-beginner-to-application/internal/gopherquest"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/fhj/go-from-beginner-to-application/pkg/gopherquestapp"
 )
 
 func main() {
@@ -35,7 +36,7 @@ func main() {
 	if addr == "" {
 		addr = ":8080"
 	}
-	srv, err := gopherquest.NewServerFromEnv()
+	srv, err := gopherquestapp.NewServerFromEnv()
 	if err != nil {
 		log.Fatalf("server: %v", err)
 	}
