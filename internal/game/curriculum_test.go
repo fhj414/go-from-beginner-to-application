@@ -74,3 +74,20 @@ func TestLessonZeroIndexCorrectOptionIsKeptInJSON(t *testing.T) {
 		t.Fatalf("lesson correct field should be 0 in json, got %#v", got)
 	}
 }
+
+func TestLessonFortyFiveUsesGetenvInsteadOfGuessingVariableName(t *testing.T) {
+	c := DefaultCurriculum()
+	var lesson Lesson
+	for _, item := range c.Lessons {
+		if item.ID == 45 {
+			lesson = item
+			break
+		}
+	}
+	if lesson.ID == 0 {
+		t.Fatal("lesson 45 not found")
+	}
+	if lesson.FillPrefix != "os." || lesson.FillAnswer != "Getenv" || lesson.FillSuffix != "(\"PORT\")" {
+		t.Fatalf("lesson 45 fill config unexpected: prefix=%q answer=%q suffix=%q", lesson.FillPrefix, lesson.FillAnswer, lesson.FillSuffix)
+	}
+}
